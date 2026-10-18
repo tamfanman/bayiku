@@ -371,6 +371,25 @@ main{flex:1;padding-block:4px 108px;display:flex;flex-direction:column;gap:38px}
   font-variation-settings:'wdth' 104;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .kode button{color:var(--mpasi);font-size:13px;font-weight:600;flex:none}
 
+/* ---------- pasangan: gembok, kode, status sinkron ---------- */
+.lock{background:var(--raise);border-radius:var(--r);padding:17px 16px;margin-bottom:18px}
+.lock b{display:block;font-size:15px;font-weight:600;margin-bottom:5px;
+  font-variation-settings:'wdth' 106}
+.lock p{font-size:13px;color:var(--fg2);margin:0;line-height:1.5;max-width:44ch}
+.sync{background:var(--raise);border-radius:var(--r);padding:14px 16px;display:flex;
+  align-items:center;gap:11px;font-size:13px;color:var(--fg2)}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--popok);flex:none}
+.sync.off i{background:var(--botol)}
+.sync b{color:var(--fg);font-weight:600}
+.or{display:flex;align-items:center;gap:13px;margin:22px 0;font-size:10.5px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ghost);
+  font-variation-settings:'wdth' 88}
+.or:before,.or:after{content:'';flex:1;height:1px;background:var(--rule)}
+.sim{font-size:12px;color:var(--ghost);line-height:1.6;margin:16px 0 0}
+.sim button{color:var(--fg2);text-decoration:underline;text-underline-offset:3px;
+  font-weight:500}
+.sim button:hover{color:var(--fg)}
+
 /* ---------- tab bawah ---------- */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--bg);
   padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -480,7 +499,7 @@ main{flex:1;padding-block:4px 108px;display:flex;flex-direction:column;gap:38px}
 
 <script>
 /* ===================== data dasar ===================== */
-const LS = 'bayiku.v4';   /* dinaikkan saat bentuk data berubah, biar tidak memuat data lama */
+const LS = 'bayiku.v5';   /* dinaikkan saat bentuk data berubah, biar tidak memuat data lama */
 const MIN = 60000, HOUR = 3600000, DAY = 86400000;
 
 const KIND = {
@@ -555,6 +574,25 @@ let S;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const kodeUndangan = () => 'BAYIKU-' + Math.floor(1000 + Math.random()*9000);
 
+/* Kode sambung pasangan. Alfabetnya sengaja tanpa I, O, 0, dan 1 — kode ini dibacakan
+   lewat telepon atau diketik ulang jam dua pagi, jadi huruf yang mirip harus dibuang. */
+const ALF = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const kodePasangan = () => {
+  let s = '';
+  for(let i = 0; i < 6; i++) s += ALF[Math.floor(Math.random()*ALF.length)];
+  return 'BAYIKU-' + s;
+};
+const KODE_BERLAKU = 30*60000;   /* 30 menit, sama dengan kode pengasuh di rencana teknis */
+
+/* rumah tangga baru: belum tersambung ke siapa pun */
+function hhBaru(){
+  return {id:null, link:'solo', invite:null, partner:null,
+          sync:{at:null, pending:0, dari:null}};
+}
+function meBaru(){
+  return {id:uid(), name:'Kamu', role:'Orang tua', dev:'hp-'+uid()};
+}
+
 /* keadaan awal sebelum perkenalan selesai — kosong, bukan data contoh */
 function blank(){
   return {
@@ -563,13 +601,24 @@ function blank(){
     theme:null, day:0, goals:[], invite:kodeUndangan(),
     people:[{name:'Kamu', role:'Orang tua', via:'aplikasi'}],
     events:[], meas:[], milk:[], vaks:vaksBaru(null),
+    me:meBaru(), hh:hhBaru(), plus:null,
   };
 }
 
 function seed(child, goals){
   const now = Date.now(), r = m => now - m*MIN;
   const SRI = 'Bu Sri', RINA = 'Rina', DIMAS = 'Dimas', WA = 'whatsapp', AP = 'app';
+  /* Di data contoh, "kamu" adalah Rina dan pasangannya Dimas pakai HP sendiri.
+     Tiap catatan dari aplikasi membawa id perangkat, supaya terbaca dari HP siapa. */
+  const DEV_ME = 'hp-rina', DEV_P = 'hp-dimas';
   const ev = (type,at,o={}) => Object.assign({id:uid(), type, at, by:SRI, src:WA}, o);
+  /* lengkapi tiap catatan: upd untuk urutan penggabungan, dev untuk asal perangkat */
+  const lengkapi = list => list.map(e => {
+    e.upd = e.upd || e.at;
+    if(e.src !== WA) e.dev = e.by === DIMAS ? DEV_P : DEV_ME;
+    return e;
+  });
+  const cap = list => list.map(x => (x.upd = x.upd || x.at || Date.parse(x.on) || now, x));
 
   /* Tujuh hari ke belakang, hari penuh — supaya Riwayat, Tren dan Stok ASI punya dasar nyata.
      Siapa yang mencatat mengikuti jam: jam kerja Bu Sri lewat WhatsApp, sisanya orang tua. */
@@ -607,12 +656,17 @@ function seed(child, goals){
     child: child || {name:'Arka', sex:'M', bornAt:new Date(now - 224*DAY).toISOString(), gest:null},
     onboarded:true, goals:goals || [],
     theme:null, day:0, invite:'BAYIKU-4821',
+    me:{id:uid(), name:RINA, role:'Ibu', dev:DEV_ME},
+    plus:{paket:'Tahunan', since:now - 40*DAY},
+    hh:{id:'contoh', link:'tersambung', invite:null,
+        partner:{id:uid(), name:DIMAS, role:'Ayah', dev:DEV_P, since:now - 38*DAY},
+        sync:{at:now - 4*MIN, pending:0, dari:DIMAS}},
     people:[
       {name:RINA,  role:'Ibu',      via:'aplikasi'},
       {name:DIMAS, role:'Ayah',     via:'aplikasi'},
       {name:SRI,   role:'Pengasuh', via:'WhatsApp'},
     ],
-    events:hist.concat([
+    events:lengkapi(hist.concat([
       ev('popok',   r(18),  {sub:'pipis'}),
       ev('nenen',   r(52),  {side:'Kanan', mins:9}),
       ev('tidur',   r(95),  {end:r(43)}),
@@ -626,17 +680,17 @@ function seed(child, goals){
       ev('popok',   r(352), {sub:'pipis', by:RINA, src:AP}),
       ev('nenen',   r(394), {side:'Kanan', mins:11, by:RINA, src:AP}),
       ev('tidur',   r(1088),{end:r(418), by:DIMAS, src:AP}),
-    ]),
-    meas:[
+    ])),
+    meas:cap([
       {id:uid(), on:new Date(now-194*DAY).toISOString().slice(0,10), kg:3.4,  cm:50.5, hc:35.0},
       {id:uid(), on:new Date(now-162*DAY).toISOString().slice(0,10), kg:4.6,  cm:55.1, hc:37.1},
       {id:uid(), on:new Date(now-128*DAY).toISOString().slice(0,10), kg:5.9,  cm:59.4, hc:39.4},
       {id:uid(), on:new Date(now- 96*DAY).toISOString().slice(0,10), kg:6.8,  cm:63.0, hc:41.2},
       {id:uid(), on:new Date(now- 62*DAY).toISOString().slice(0,10), kg:7.6,  cm:66.2, hc:42.5},
       {id:uid(), on:new Date(now- 28*DAY).toISOString().slice(0,10), kg:8.25, cm:68.8, hc:43.4},
-    ],
+    ]),
     vaks:vaksBaru(4),
-    milk:[
+    milk:cap([
       {id:uid(), at:now-152*MIN,  ml:90,  left:90,  store:'kulkas',  since:now-152*MIN},
       {id:uid(), at:now-334*MIN,  ml:75,  left:75,  store:'kulkas',  since:now-334*MIN},
       {id:uid(), at:now-1.8*DAY,  ml:120, left:120, store:'kulkas',  since:now-1.8*DAY},
@@ -645,7 +699,7 @@ function seed(child, goals){
       {id:uid(), at:now-21*DAY,   ml:140, left:140, store:'freezer', since:now-21*DAY},
       {id:uid(), at:now-33*DAY,   ml:180, left:180, store:'freezer', since:now-33*DAY},
       {id:uid(), at:now-48*DAY,   ml:165, left:165, store:'freezer', since:now-48*DAY},
-    ],
+    ]),
   };
 }
 function load(){
@@ -654,12 +708,22 @@ function load(){
     if(raw){
       const s = JSON.parse(raw);
       /* kalau bentuknya tidak lengkap, lebih baik mulai dari awal daripada rusak separuh */
-      if(s && s.events && s.people && s.milk && s.child && s.vaks) return s;
+      if(s && s.events && s.people && s.milk && s.child && s.vaks){
+        /* bagian pasangan boleh menyusul: data dari versi sebelum fitur ini tetap dipakai */
+        if(!s.me) s.me = meBaru();
+        if(!s.hh) s.hh = hhBaru();
+        if(!s.hh.sync) s.hh.sync = {at:null, pending:0, dari:null};
+        if(s.plus === undefined) s.plus = null;
+        return s;
+      }
     }
   }catch(e){}
   return blank();
 }
-function save(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
+function save(){
+  try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){}
+  dorong();   /* kalau ada yang menunggu dikirim ke HP pasangan, kirim sekarang */
+}
 
 /* ===================== bantuan ===================== */
 const pad = n => String(n).padStart(2,'0');
@@ -703,9 +767,13 @@ function icon(id, size, cls){
     'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '+
     'aria-hidden="true"><use href="#'+id+'"/></svg>';
 }
-const sorted = () => S.events.slice().sort((a,b)=>b.at-a.at);
+/* Catatan yang dihapus tidak dibuang dari daftar, hanya ditandai del — kalau dibuang,
+   penggabungan dari HP pasangan akan menghidupkannya lagi. Semua yang membaca catatan
+   lewat EV(), jangan langsung ke S.events. */
+const EV = () => S.events.filter(e => !e.del);
+const sorted = () => EV().sort((a,b)=>b.at-a.at);
 const lastOf = t => sorted().find(e => e.type===t);
-const openSleep = () => S.events.find(e => e.type==='tidur' && !e.end);
+const openSleep = () => EV().find(e => e.type==='tidur' && !e.end);
 
 /* ===================== z-score WHO ===================== */
 function lms(kind, months){
@@ -753,7 +821,7 @@ function zText(z, k){
 function predict(){
   const op = openSleep();
   if(op) return {sleeping:true, since:op.at};
-  const last = S.events.filter(e=>e.type==='tidur' && e.end).sort((a,b)=>b.end-a.end)[0];
+  const last = EV().filter(e=>e.type==='tidur' && e.end).sort((a,b)=>b.end-a.end)[0];
   if(!last) return null;
   const [lo,hi] = wakeWindow(ageMonths());
   return {sleeping:false, at:last.end + ((lo+hi)/2)*MIN, lo, hi, since:last.end};
@@ -761,14 +829,14 @@ function predict(){
 
 /* ===================== stok ASI ===================== */
 const expiresAt = b => b.since + SIMPAN[b.store]*HOUR;
-const liveMilk = () => S.milk.filter(b => b.left > 0 && expiresAt(b) > Date.now())
+const liveMilk = () => S.milk.filter(b => !b.del && b.left > 0 && expiresAt(b) > Date.now())
                              .sort((a,b) => expiresAt(a)-expiresAt(b));
 function milkTotal(){ return liveMilk().reduce((s,b)=>s+b.left, 0); }
 function milkDays(){
   const since = Date.now()-7*DAY;
-  const pakai = S.events.filter(e=>e.type==='botol' && e.at>since && e.fromStock)
+  const pakai = EV().filter(e=>e.type==='botol' && e.at>since && e.fromStock)
                         .reduce((s,e)=>s+(e.ml||0),0)/7;
-  const perah = S.events.filter(e=>e.type==='pumping' && e.at>since)
+  const perah = EV().filter(e=>e.type==='pumping' && e.at>since)
                         .reduce((s,e)=>s+(e.ml||0),0)/7;
   const def = pakai - perah;
   return {pakai, perah, def, hari: def>0 ? milkTotal()/def : null};
@@ -873,24 +941,216 @@ function describe(e){
 }
 
 /* ===================== aksi ===================== */
+/* Satu pintu untuk setiap perubahan lokal: kapan terakhir diubah, dari HP mana, dan
+   siapa yang mencatat. upd dipakai saat menggabungkan dengan catatan dari HP pasangan. */
+function tandai(e){
+  e.upd = Date.now();
+  if(S.me){
+    if(!e.dev && e.src !== 'whatsapp') e.dev = S.me.dev;
+    if(!e.by || e.by === 'Kamu') e.by = S.me.name || 'Kamu';
+  }
+  return e;
+}
+/* perubahan lokal masuk antrean kirim; kalau belum tersambung, tidak ada antrean */
+function ubah(){ if(tersambung()) S.hh.sync.pending++; }
+
 function addEvent(e){
+  tandai(e); ubah();
   S.events.push(e);
   if(e.type === 'pumping' && e.toStock && e.ml){
-    S.milk.push({id:uid(), at:e.at, ml:e.ml, left:e.ml, store:'kulkas', since:e.at});
+    S.milk.push({id:uid(), at:e.at, ml:e.ml, left:e.ml, store:'kulkas', since:e.at,
+                 upd:Date.now()});
   }
   save(); render();
 }
 function delEvent(id){
-  const i = S.events.findIndex(e => e.id === id);
-  if(i > -1){ S.events.splice(i,1); save(); render(); toast('Dihapus'); }
+  const e = S.events.find(x => x.id === id && !x.del);
+  if(!e) return;
+  /* ditandai, bukan dibuang: kalau dibuang, kiriman dari HP pasangan menghidupkannya lagi */
+  e.del = true; tandai(e); ubah();
+  save(); render(); toast('Dihapus');
 }
 function useMilk(ml){
   let need = ml;
   for(const b of liveMilk()){
     if(need <= 0) break;
     const take = Math.min(b.left, need); b.left -= take; need -= take;
+    b.upd = Date.now();
   }
   return ml - need;
+}
+
+/* ===================== pasangan: sambung dan sinkron =====================
+   Aturannya sama dengan bagian 4 "Sinkronisasi" di Rencana Teknis: id dibuat di
+   perangkat supaya pengiriman ulang tidak menggandakan, urutan memakai upd, dan
+   menghapus mengalahkan mengedit. Yang belum ada di prototipe hanya servernya —
+   transportnya disimulasikan di bagian paling bawah bab ini. */
+
+const plusAktif  = () => !!(S.plus && S.plus.paket);
+const tersambung = () => !!(S.hh && S.hh.link === 'tersambung' && S.hh.partner);
+const daring     = () => typeof navigator === 'undefined' || navigator.onLine !== false;
+
+function rapiKode(x){
+  const t = String(x || '').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/^BAYIKU/,'');
+  return t ? 'BAYIKU-' + t : '';
+}
+function cekKode(x){
+  const k = rapiKode(x);
+  if(!k) return {err:'Masukkan kodenya dulu.'};
+  if(!/^BAYIKU-[A-Z0-9]{6}$/.test(k))
+    return {err:'Kodenya enam huruf atau angka sesudah BAYIKU-, misalnya BAYIKU-K7F2QM.'};
+  if(S.hh.invite && k === S.hh.invite.code)
+    return {err:'Itu kode dari HP ini sendiri. Yang dimasukkan kode dari HP pasanganmu.'};
+  return {ok:k};
+}
+const sisaUndangan = () => S.hh.invite ? Math.max(0, S.hh.invite.exp - Date.now()) : 0;
+
+function undang(nama, peran){
+  if(!plusAktif()) return {err:'Hubungkan pasangan ada di Bayiku Plus.'};
+  S.hh.invite = {code:kodePasangan(), at:Date.now(), exp:Date.now()+KODE_BERLAKU,
+                 nama:String(nama || '').trim(), peran:peran || 'Pasangan'};
+  if(S.hh.link === 'solo') S.hh.link = 'menunggu';
+  save();
+  return {ok:S.hh.invite.code};
+}
+function batalUndang(){
+  S.hh.invite = null;
+  S.hh.link = tersambung() ? 'tersambung' : 'solo';
+  save();
+}
+function sambung(kode, nama, peran){
+  if(!plusAktif()) return {err:'Hubungkan pasangan ada di Bayiku Plus.'};
+  if(tersambung()) return {err:'HP ini sudah tersambung ke '+S.hh.partner.name+'.'};
+  const c = cekKode(kode);
+  if(c.err) return c;
+  /* Di prototipe kodenya sekaligus jadi id rumah tangga, supaya dua sisi bertemu di
+     saluran yang sama. Di versi sungguhan server yang memegang id dan kedaluwarsanya. */
+  const id = c.ok.slice(7).toLowerCase();
+  pasangkan({name:nama, role:peran, dev:'hp-'+id}, id);
+  return {ok:c.ok};
+}
+function pasangkan(p, hhId){
+  const nama = String(p && p.name || '').trim() || 'Pasangan';
+  S.hh.id = hhId || S.hh.id || uid();
+  S.hh.partner = {id:uid(), name:nama, role:(p && p.role) || 'Pasangan',
+                  dev:(p && p.dev) || 'hp-'+uid(), since:Date.now()};
+  S.hh.link = 'tersambung';
+  S.hh.invite = null;
+  S.hh.sync = {at:Date.now(), pending:0, dari:null};
+  if(!S.people.some(x => x.name === nama))
+    S.people.push({name:nama, role:S.hh.partner.role, via:'aplikasi', dev:S.hh.partner.dev});
+  save(); pasangKanal();
+  return S.hh.partner;
+}
+function lepas(){
+  const p = S.hh.partner;
+  const nm = p ? p.name : '';
+  tutupKanal();
+  S.hh = hhBaru();
+  /* Catatan yang sudah masuk tetap tinggal: itu riwayat anaknya, bukan milik perangkat.
+     Yang hilang hanya sambungannya, jadi tidak ada lagi yang dikirim atau diterima. */
+  if(p) S.people = S.people.filter(x => x.dev !== p.dev);
+  save();
+  return nm;
+}
+
+/* ---------- penggabungan ---------- */
+function gabung(p){
+  const hasil = {tambah:0, ubah:0, ev:0};
+  const satukan = (lokal, masuk, kunci, hitungEv) => {
+    if(!Array.isArray(masuk) || !Array.isArray(lokal)) return;
+    const peta = {};
+    for(const x of lokal) peta[x[kunci]] = x;
+    for(const y of masuk){
+      if(!y || y[kunci] == null) continue;
+      const a = peta[y[kunci]];
+      if(!a){
+        const salin = JSON.parse(JSON.stringify(y));
+        lokal.push(salin); peta[y[kunci]] = salin;
+        hasil.tambah++; if(hitungEv && !salin.del) hasil.ev++;
+        continue;
+      }
+      if(a.del) continue;                     /* sudah dihapus — jangan dihidupkan edit */
+      if(y.del){ a.del = true; a.upd = y.upd || Date.now(); hasil.ubah++; continue; }
+      if((y.upd || 0) > (a.upd || 0)){ Object.assign(a, y); hasil.ubah++; }
+    }
+  };
+  satukan(S.events, p.events, 'id', true);
+  satukan(S.meas,   p.meas,   'id');
+  satukan(S.milk,   p.milk,   'id');
+  satukan(S.vaks,   p.vaks,   'code');
+  return hasil;
+}
+
+/* ---------- transport ----------
+   Prototipe: satu saluran antar-tab di peramban yang sama (BroadcastChannel), bukan
+   server. Bentuk paket dan jalurnya sudah sama dengan rencana aslinya, jadi yang
+   diganti nanti hanya isi dorong() dan pemasangan pendengarnya. */
+let kanal = null, menerima = false;
+const namaKanal = () => 'bayiku.sinkron.' + ((S.hh && S.hh.id) || 'tanpa');
+
+function pasangKanal(){
+  tutupKanal();
+  if(!tersambung()) return;
+  try{
+    if(typeof BroadcastChannel === 'function'){
+      kanal = new BroadcastChannel(namaKanal());
+      kanal.onmessage = e => sinkronTerima(e.data);
+    }
+  }catch(e){ kanal = null; }
+}
+function tutupKanal(){ try{ if(kanal) kanal.close(); }catch(e){} kanal = null; }
+
+function paketKeluar(){
+  return {dev:S.me.dev, nama:S.me.name, at:Date.now(),
+          events:S.events, meas:S.meas, milk:S.milk, vaks:S.vaks};
+}
+function dorong(){
+  if(menerima || !tersambung() || !S.hh.sync.pending) return;
+  /* offline: biarkan menumpuk di antrean, jangan hilang dan jangan ulang-ulang */
+  if(!daring()) return;
+  try{ if(kanal) kanal.postMessage(JSON.parse(JSON.stringify(paketKeluar()))); }catch(e){}
+  S.hh.sync.pending = 0;
+  S.hh.sync.at = Date.now();
+  try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){}
+}
+function sinkronTerima(p){
+  if(!p || !tersambung() || p.dev === S.me.dev) return null;
+  menerima = true;
+  const r = gabung(p);
+  S.hh.sync.at = Date.now();
+  S.hh.sync.dari = p.nama || S.hh.partner.name;
+  save();
+  menerima = false;
+  if(typeof document !== 'undefined' && document.getElementById('tabbar')) render();
+  if(r.ev) toast(r.ev === 1 ? 'Catatan baru dari '+S.hh.sync.dari
+                            : r.ev+' catatan baru dari '+S.hh.sync.dari);
+  return r;
+}
+
+/* ---------- simulasi, khusus prototipe ----------
+   Tidak ada server, jadi "HP pasangan" diperankan di sini. Dua fungsi ini satu-satunya
+   bagian yang palsu; sisanya lewat jalur yang sama dengan versi sungguhan. */
+function simPasanganMasuk(nama, peran){
+  if(!S.hh.invite) return null;
+  const inv = S.hh.invite, id = inv.code.slice(7).toLowerCase();
+  return pasangkan({name:String(nama || '').trim() || inv.nama,
+                    role:peran || inv.peran, dev:'hp-'+id}, id);
+}
+function simCatatanPasangan(){
+  if(!tersambung()) return null;
+  const p = S.hh.partner;
+  const pilihan = openSleep() ? ['popok','botol','nenen'] : ['popok','botol','nenen','tidur'];
+  const jenis = pilihan[Math.floor(Math.random()*pilihan.length)];
+  const at = Date.now() - (3 + Math.floor(Math.random()*25))*MIN;
+  const e = {id:uid(), type:jenis, at, by:p.name, src:'app', dev:p.dev, upd:Date.now()};
+  if(jenis === 'popok') e.sub = Math.random() < .35 ? 'pup' : 'pipis';
+  if(jenis === 'botol') e.ml = 90 + Math.floor(Math.random()*5)*15;
+  if(jenis === 'nenen'){ e.side = Math.random() < .5 ? 'Kiri' : 'Kanan';
+                         e.mins = 8 + Math.floor(Math.random()*8); }
+  if(jenis === 'tidur'){ e.at = at - 70*MIN; e.end = at; }
+  sinkronTerima({dev:p.dev, nama:p.name, at:Date.now(), events:[e]});
+  return e;
 }
 
 let toastTimer;
@@ -914,7 +1174,8 @@ function closeSheet(){
 function openSheet(type){
   closeSheet();
   sheetState = {type, side:'Kiri', ml:type==='pumping'?90:120, sub:'pipis',
-                running:false, t0:0, acc:0, note:'', temp:36.8};
+                running:false, t0:0, acc:0, note:'', temp:36.8,
+                pName:'', pRole:'Ayah', kode:'', err:null, konfirm:false};
   const scrim = document.createElement('div');
   scrim.className = 'scrim';
   scrim.addEventListener('click', e => { if(e.target === scrim) closeSheet(); });
@@ -1074,7 +1335,7 @@ function drawSheet(){
   if(t === 'pengasuh'){
     const d0 = dayStart(0).getTime();
     const COL = ['var(--nenen)','var(--tidur)','var(--mpasi)'];
-    const hitung = n => S.events.filter(e => e.at >= d0 && e.by === n).length;
+    const hitung = n => EV().filter(e => e.at >= d0 && e.by === n).length;
     h += '<h3>Pengasuh</h3><div class="rows" style="margin-bottom:24px">'+
       S.people.map((p,i) =>
         '<div class="row"><div class="av" style="--c:'+COL[i % COL.length]+'">'+
@@ -1088,6 +1349,102 @@ function drawSheet(){
       'Tidak perlu memasang aplikasi.</p>';
   }
 
+  if(t === 'pasangan'){
+    h += '<h3>Pasangan</h3>';
+
+    /* 1. Belum berlangganan: jelaskan isinya, jangan sembunyikan di balik gembok kosong */
+    if(!plusAktif()){
+      h += '<div class="lock"><b>Dua HP, satu catatan</b>'+
+        '<p>Pasangan memasang Bayiku di HP-nya sendiri. Dua-duanya mencatat, dua-duanya '+
+        'melihat isi yang sama. Yang dia catat jam dua pagi langsung ada di HP kamu.</p></div>'+
+        '<div class="rows" style="margin-bottom:22px">'+
+        [['Dua-duanya bisa mencatat','Tidak lagi satu HP dipakai berdua'],
+         ['Tetap jalan waktu sinyal mati','Masuk antrean, terkirim sendiri saat online'],
+         ['Tiap catatan ada namanya','Kelihatan siapa yang mencatat, dari HP mana']].map(x =>
+        '<div class="row"><div class="mi" style="color:var(--mpasi);display:grid">'+icon('i-cek',16)+
+        '</div><div class="bd"><div class="ttl">'+x[0]+'</div><div class="sub">'+x[1]+
+        '</div></div></div>').join('')+'</div>'+
+        '<button class="btn primary" data-a="open" data-v="plus">Lihat Bayiku Plus</button>'+
+        '<p class="hintline">Mengundang pengasuh atau nenek lewat WhatsApp tetap gratis dan '+
+        'tanpa batas. Yang berbayar hanya HP kedua yang ikut mencatat lewat aplikasi.</p>';
+    }
+
+    /* 2. Sudah tersambung: siapa, dari HP mana, dan apakah sudah terkirim semua */
+    else if(tersambung()){
+      const p = S.hh.partner, sy = S.hh.sync, d0 = dayStart(0).getTime();
+      const hitung = dev => EV().filter(e => e.at >= d0 && e.dev === dev).length;
+      const stat = !daring()
+        ? ['off', 'Offline · <b>'+sy.pending+' catatan</b> menunggu terkirim']
+        : sy.pending ? ['off', '<b>'+sy.pending+' catatan</b> menunggu terkirim']
+        : ['', 'Tersinkron <b>'+(sy.at ? lalu(sy.at) : 'baru saja')+'</b>'];
+      h += '<div class="rows" style="margin-bottom:18px">'+
+        [[S.me.name, S.me.role+' · HP ini', S.me.dev, 'var(--nenen)'],
+         [p.name, p.role+' · tersambung '+lalu(p.since), p.dev, 'var(--tidur)']].map(x =>
+        '<div class="row"><div class="av" style="--c:'+x[3]+'">'+esc(x[0].charAt(0))+'</div>'+
+        '<div class="bd"><div class="ttl">'+esc(x[0])+'</div><div class="sub">'+esc(x[1])+
+        '</div></div><div class="rt">'+hitung(x[2])+'× hari ini</div></div>').join('')+'</div>'+
+        '<div class="sync '+stat[0]+'"><i></i><span>'+stat[1]+'</span></div>'+
+        '<p class="hintline">Catatan dari dua HP digabung menurut waktu. Kalau satu HP '+
+        'menghapus catatan, catatan itu hilang juga di HP yang lain.</p>';
+      if(sheetState.konfirm){
+        h += '<div style="height:18px"></div>'+
+          '<p class="note" style="margin:0 0 12px">Catatan yang sudah masuk tetap tersimpan '+
+          'di HP ini. Yang berhenti hanya kiriman dari dan ke HP '+esc(p.name)+'.</p>'+
+          '<div class="btnrow"><button class="btn" data-a="lepas-batal">Batal</button>'+
+          '<button class="btn c" style="--c:var(--suhu)" data-a="lepas-ya">Ya, lepas</button></div>';
+      } else {
+        h += '<div style="height:18px"></div>'+
+          '<button class="btn" data-a="lepas">Lepas sambungan</button>'+
+          '<p class="sim">Prototipe: belum ada server, jadi HP pasangan diperankan di sini. '+
+          '<button data-a="sim-catat">Kirim satu catatan dari HP '+esc(p.name)+'</button></p>';
+      }
+    }
+
+    /* 3. Menunggu: kode sudah dibuat, pasangan belum masuk */
+    else if(S.hh.invite){
+      const sisa = sisaUndangan();
+      h += '<div class="fs"><span>Kode untuk pasangan</span><div class="kode">'+
+        '<code>'+esc(S.hh.invite.code)+'</code>'+
+        '<button data-a="salin" data-v="'+esc(S.hh.invite.code)+'">Salin</button></div></div>'+
+        '<p class="hintline">'+(sisa
+          ? 'Berlaku '+dur(sisa)+' lagi. Kirim lewat WhatsApp, lalu di HP-nya: '+
+            'Profil → Pasangan → masukkan kode ini.'
+          : 'Kode ini sudah lewat 30 menit. Buat yang baru supaya tidak bisa dipakai '+
+            'orang lain.')+'</p>'+
+        '<div style="height:16px"></div>'+
+        '<div class="btnrow"><button class="btn" data-a="batal-undang">Batalkan</button>'+
+        '<button class="btn" data-a="undang">Kode baru</button></div>'+
+        '<p class="sim">Prototipe: belum ada server, jadi sisi pasangan diperankan di sini. '+
+        '<button data-a="sim-masuk">Simulasikan pasangan memasukkan kode</button></p>';
+    }
+
+    /* 4. Sudah Plus, belum tersambung: undang, atau masukkan kode dari dia */
+    else {
+      h += '<p class="hintline" style="margin:0 0 20px">Dua-duanya mencatat anak yang sama. '+
+        'Cukup satu sisi yang membuat kode.</p>'+
+        '<div class="form" style="margin-bottom:20px">'+
+        '<label><span>Namamu di catatan</span><input type="text" data-f="meName" '+
+          'value="'+esc(S.me.name)+'" autocomplete="off"></label>'+
+        '<label><span>Nama pasanganmu</span><input type="text" id="pName" '+
+          'value="'+esc(sheetState.pName || '')+'" placeholder="misalnya Dimas" '+
+          'autocomplete="off"></label>'+
+        '<div class="fs"><span>Perannya</span><div class="seg" style="--c:var(--tidur)">'+
+          ['Ibu','Ayah','Lainnya'].map(x => '<button data-a="prole" data-v="'+x+'" '+
+            'aria-pressed="'+((sheetState.pRole || 'Ayah') === x)+'">'+x+'</button>').join('')+
+        '</div></div></div>'+
+        '<button class="btn primary" data-a="undang">Buat kode undangan</button>'+
+        '<div class="or">atau</div>'+
+        '<div class="fs"><span>Sudah dapat kode dari dia?</span>'+
+        '<input type="text" id="joinKode" placeholder="BAYIKU-K7F2QM" autocomplete="off" '+
+        'autocapitalize="characters" spellcheck="false" '+
+        'value="'+esc(sheetState.kode || '')+'"></div>'+   /* yang sudah diketik jangan hilang */
+        (sheetState.err ? '<p class="hintline" style="color:var(--nenen);margin-top:10px">'+
+          esc(sheetState.err)+'</p>' : '')+
+        '<div style="height:12px"></div>'+
+        '<button class="btn" data-a="sambung">Sambungkan HP ini</button>';
+    }
+  }
+
   if(t === 'tujuan'){
     const g = S.goals || [];
     h += '<h3>Tujuan</h3>'+
@@ -1099,22 +1456,31 @@ function drawSheet(){
 
   if(t === 'plus'){
     h += '<h3>Bayiku Plus</h3>'+
-      '<p class="hintline" style="margin:0 0 20px">Mencatat, berbagi dengan pengasuh, kurva WHO '+
-      'dan imunisasi tetap gratis selamanya.</p><div class="rows" style="margin-bottom:22px">'+
-      [['Widget di layar kunci','Ngantuk berikutnya tanpa buka aplikasi'],
+      '<p class="hintline" style="margin:0 0 20px">Mencatat, berbagi dengan pengasuh lewat '+
+      'WhatsApp, kurva WHO dan imunisasi tetap gratis selamanya.</p>'+
+      '<div class="rows" style="margin-bottom:22px">'+
+      [['Pasangan di HP terpisah','Dua-duanya mencatat, isinya satu dan sama'],
+       ['Widget di layar kunci','Ngantuk berikutnya tanpa buka aplikasi'],
        ['Laporan dan tren tanpa batas','Yang gratis hanya 30 hari terakhir'],
        ['Perkiraan tidur dari pola sendiri','Bukan rata-rata seumuran'],
        ['Stok ASI lanjutan','Peringatan kedaluwarsa dan perkiraan habis'],
        ['Ekspor PDF untuk dokter','Satu halaman rapi buat dibawa kontrol']].map(x =>
       '<div class="row"><div class="mi" style="color:var(--mpasi);display:grid">'+icon('i-cek',16)+
       '</div><div class="bd"><div class="ttl">'+x[0]+'</div><div class="sub">'+x[1]+
-      '</div></div></div>').join('')+'</div><div class="harga">'+
-      [['Tahunan','Rp249.000','± Rp20.750 per bulan, hemat 47%'],
-       ['Bulanan','Rp39.000','bisa berhenti kapan saja'],
-       ['Kado lahiran','Rp299.000','1 tahun, dikirim sebagai kartu digital']].map(x =>
-      '<button class="pl" data-a="beli" data-v="'+x[0]+'"><span class="pn">'+x[0]+'</span>'+
-      '<span class="pv">'+x[1]+'</span><span class="pk">'+x[2]+'</span></button>').join('')+
-      '</div><p class="hintline">Prototipe — belum ada pembayaran sungguhan.</p>';
+      '</div></div></div>').join('')+'</div>'+
+      (plusAktif()
+        ? '<div class="sync"><i></i><span>Aktif · paket <b>'+esc(S.plus.paket)+'</b>, mulai '+
+          lalu(S.plus.since)+'</span></div>'+
+          '<p class="sim">Prototipe: tidak ada tagihan apa pun. '+
+          '<button data-a="plus-mati">Matikan Plus lagi</button></p>'
+        : '<div class="harga">'+
+          [['Tahunan','Rp249.000','± Rp20.750 per bulan, hemat 47%'],
+           ['Bulanan','Rp39.000','bisa berhenti kapan saja'],
+           ['Kado lahiran','Rp299.000','1 tahun, dikirim sebagai kartu digital']].map(x =>
+          '<button class="pl" data-a="beli" data-v="'+x[0]+'"><span class="pn">'+x[0]+'</span>'+
+          '<span class="pv">'+x[1]+'</span><span class="pk">'+x[2]+'</span></button>').join('')+
+          '</div><p class="hintline">Prototipe — belum ada pembayaran sungguhan. Menekan salah '+
+          'satu paket hanya menyalakan fiturnya supaya bisa dicoba.</p>');
   }
 
   if(t === 'widget'){
@@ -1142,6 +1508,9 @@ function drawSheet(){
       'tidak dikirim ke mana pun. Bukan alat medis dan bukan pengganti pemeriksaan dokter. '+
       'Angka masa simpan ASI dan jendela bangun masih perlu diverifikasi ke IDAI atau '+
       'Kemenkes sebelum dipakai sungguhan.</p>'+
+      '<p class="note" style="margin:0 0 20px">Sambungan ke HP pasangan juga belum lewat '+
+      'server: penggabungan catatannya sungguhan, tapi sisi pasangannya diperankan di '+
+      'dalam prototipe ini.</p>'+
       '<div class="btnrow" style="flex-direction:column;gap:8px">'+
       '<button class="btn" data-a="reset">Muat ulang data contoh</button>'+
       '<button class="btn" data-a="ulang">Ulangi perkenalan dari awal</button></div>';
@@ -1170,7 +1539,8 @@ document.addEventListener('click', e => {
 
   if(a === 'sleep'){ addEvent({id:uid(), type:'tidur', at:Date.now(), by:'Kamu', src:'app'});
     closeSheet(); toast('Tidur dimulai'); }
-  if(a === 'wake'){ const op = openSleep(); if(op){ op.end = Date.now(); save(); render(); }
+  if(a === 'wake'){ const op = openSleep();
+    if(op){ op.end = Date.now(); tandai(op); ubah(); save(); render(); }
     closeSheet(); toast('Bangun · tidur '+(op?dur(op.end-op.at):'')); }
 
   if(a === 'save-nenen'){
@@ -1229,16 +1599,16 @@ document.addEventListener('click', e => {
     if(!ada){ toast('Isi salah satu angkanya dulu'); return; }
 
     const id = uid();
-    S.meas.push(Object.assign({id, on, kg:null, cm:null, hc:null}, isi));
+    S.meas.push(Object.assign({id, on, kg:null, cm:null, hc:null, upd:Date.now()}, isi));
     S.msel = id;
-    save(); render(); closeSheet(); toast('Hasil timbang tersimpan');
+    ubah(); save(); render(); closeSheet(); toast('Hasil timbang tersimpan');
   }
   if(a === 'delmeas'){
-    const i = S.meas.findIndex(m => m.id === v);
-    if(i > -1){
-      S.meas.splice(i,1);
+    const m = S.meas.find(x => x.id === v && !x.del);
+    if(m){
+      m.del = true; m.upd = Date.now();
       if(S.msel === v) S.msel = null;
-      save(); render(); toast('Pengukuran dihapus');
+      ubah(); save(); render(); toast('Pengukuran dihapus');
     }
   }
 
@@ -1264,7 +1634,8 @@ document.addEventListener('click', e => {
   if(a === 'htab')  { S.htab = v; save(); render(); window.scrollTo({top:0}); }
   if(a === 'day')   { S.day = Math.max(0, (S.day||0) + (+v)); save(); render(); }
   if(a === 'del')   delEvent(v);
-  if(a === 'vaks')  { const x = S.vaks.find(z=>z.code===v); if(x){ x.done = !x.done; save(); render(); } }
+  if(a === 'vaks')  { const x = S.vaks.find(z=>z.code===v);
+    if(x){ x.done = !x.done; x.upd = Date.now(); ubah(); save(); render(); } }
   if(a === 'try')   { const i = document.getElementById('waIn'); if(i){ i.value = v; i.focus(); } }
   if(a === 'mpoint'){ S.msel = (S.msel === v ? null : v); save(); render(); }
   if(a === 'sex')   { S.child.sex = v; refresh(); }
@@ -1281,7 +1652,50 @@ document.addEventListener('click', e => {
     else { r.setAttribute('data-theme', v); S.theme = v; }
     refresh();
   }
-  if(a === 'beli')   toast('Prototipe — belum ada pembayaran sungguhan');
+  /* ---------- pasangan ---------- */
+  if(a === 'prole'){ S_.pRole = v; drawSheet(); }
+  if(a === 'undang'){
+    const el = document.getElementById('pName');
+    if(el) S_.pName = el.value;
+    const r = undang(S_.pName, S_.pRole);
+    if(r.err){ toast(r.err); return; }
+    render(); drawSheet(); toast('Kode undangan dibuat');
+  }
+  if(a === 'batal-undang'){ batalUndang(); render(); drawSheet(); toast('Undangan dibatalkan'); }
+  if(a === 'sambung'){
+    const kd = document.getElementById('joinKode');
+    const nm = document.getElementById('pName');
+    if(nm) S_.pName = nm.value;
+    if(kd) S_.kode = kd.value;
+    const r = sambung(S_.kode, S_.pName, S_.pRole);
+    if(r.err){ S_.err = r.err; drawSheet(); return; }
+    S_.err = null; S_.kode = ''; render(); drawSheet();
+    toast('Tersambung ke '+S.hh.partner.name);
+  }
+  if(a === 'lepas'){ S_.konfirm = true; drawSheet(); }
+  if(a === 'lepas-batal'){ S_.konfirm = false; drawSheet(); }
+  if(a === 'lepas-ya'){
+    const nm = lepas(); S_.konfirm = false;
+    render(); drawSheet(); toast('Sambungan ke '+nm+' dilepas');
+  }
+  /* dua aksi berikut cuma ada di prototipe — pengganti server, lihat bab simulasi */
+  if(a === 'sim-masuk'){
+    const el = document.getElementById('pName');
+    const p = simPasanganMasuk((el && el.value) || S_.pName, S_.pRole);
+    if(p){ render(); drawSheet(); toast(p.name+' tersambung'); }
+  }
+  if(a === 'sim-catat'){ if(simCatatanPasangan()) drawSheet(); }
+
+  if(a === 'beli'){
+    S.plus = {paket:v, since:Date.now()};
+    save(); render(); drawSheet();
+    toast('Prototipe: Plus dinyalakan, tanpa pembayaran');
+  }
+  if(a === 'plus-mati'){
+    S.plus = null;
+    if(tersambung()) lepas(); else batalUndang();
+    save(); render(); drawSheet(); toast('Plus dimatikan');
+  }
   if(a === 'pasang'){ closeSheet(); toast('Di aplikasi asli, ini membuka panduan pasang widget'); }
   if(a === 'reset') {
     S = seed(S.child.bornAt ? S.child : null, S.goals);
@@ -1375,7 +1789,11 @@ function viewBeranda(){
 
 function evRow(e){
   const k = KIND[e.type];
-  const who = e.src === 'whatsapp' ? esc(e.by)+', lewat WhatsApp' : esc(e.by);
+  /* dari HP mana itu bagian dari gunanya: "Dimas, dari HP-nya" menjawab pertanyaan
+     "ini aku yang catat atau dia?" tanpa perlu bertanya */
+  const lain = tersambung() && e.dev && e.dev === S.hh.partner.dev;
+  const who = e.src === 'whatsapp' ? esc(e.by)+', lewat WhatsApp'
+            : lain ? esc(e.by)+', dari HP-nya' : esc(e.by);
   return '<div class="ev" style="--c:'+k.c+'"><div class="t num">'+jam(e.at)+'</div>'+
     '<div class="ic">'+icon(k.ic,17)+'</div>'+
     '<div class="bd"><div class="ttl">'+esc(describe(e))+'</div>'+
@@ -1409,7 +1827,7 @@ function viewRincian(tabs){
   /* pita hanya menggambar tidur. Tanpa tanda kecil per kejadian dan tanpa keterangan warna:
      satu pita yang langsung terbaca lebih berguna daripada bagan yang harus diterjemahkan. */
   let segs = '', tidurTotal = 0, nSiang = 0, nMalam = 0;
-  for(const e of S.events){
+  for(const e of EV()){
     if(e.type !== 'tidur') continue;
     const a = Math.max(t0, e.at), b = Math.min(t1, e.end || Date.now());
     if(b <= a) continue;
@@ -1420,7 +1838,7 @@ function viewRincian(tabs){
   }
 
   const sum = {nenen:0, ml:0, popok:0};
-  for(const e of S.events) if(dalam(e)){
+  for(const e of EV()) if(dalam(e)){
     if(e.type === 'nenen') sum.nenen++;
     if(e.type === 'botol') sum.ml += e.ml || 0;
     if(e.type === 'popok') sum.popok++;
@@ -1463,7 +1881,7 @@ function viewPekan(tabs){
   for(let d = 6; d >= 0; d--){
     const s = dayStart(d), a = s.getTime(), b = a + DAY;
     const x = {d, s, malam:0, siang:0, nenen:0, ml:0, popok:0};
-    for(const e of S.events){
+    for(const e of EV()){
       if(e.type === 'tidur'){
         const p = Math.max(a, e.at), q = Math.min(b, e.end || Date.now());
         if(q <= p) continue;
@@ -1531,12 +1949,19 @@ function viewProfil(){
 
   h += '<section><p class="lbl">Anak</p><div class="menu-g">'+
     baris('i-beranda','Data anak', c.sex === 'M' ? 'Laki-laki' : 'Perempuan', 'anak')+
-    baris('i-orang','Pengasuh', S.people.length+' orang', 'pengasuh')+
     baris('i-tumbuh','Tujuan', nTujuan ? nTujuan+' dipilih' : 'belum diisi', 'tujuan')+
     '</div></section>';
 
+  const statusPasangan = tersambung() ? esc(S.hh.partner.name)
+    : !plusAktif() ? 'Bayiku Plus'
+    : S.hh.invite ? 'Menunggu' : 'Belum tersambung';
+  h += '<section><p class="lbl">Berbagi</p><div class="menu-g">'+
+    baris('i-orang','Pasangan', statusPasangan, 'pasangan')+
+    baris('i-chat','Pengasuh lewat WhatsApp', S.people.length+' orang', 'pengasuh')+
+    '</div></section>';
+
   h += '<section><p class="lbl">Bayiku</p><div class="menu-g">'+
-    baris('i-asi','Bayiku Plus','Gratis','plus')+
+    baris('i-asi','Bayiku Plus', plusAktif() ? esc(S.plus.paket) : 'Gratis','plus')+
     baris('i-hariini','Widget layar kunci','Belum dipasang','widget')+
     '</div></section>';
 
@@ -1767,7 +2192,7 @@ function viewTumbuh(){
   const key = (S.child.sex === 'M' ? 'b' : 'g') + U.k;
   const nm = S.child.name || 'anak';
 
-  const pts = S.meas.filter(m => m[U.f] != null)
+  const pts = S.meas.filter(m => !m.del && m[U.f] != null)
     .map(m => ({id:m.id, on:m.on, x:ageMonths(new Date(m.on).getTime()), y:m[U.f]}))
     .filter(p => p.x >= 0).sort((a,b) => a.x - b.x);
 
@@ -2005,7 +2430,10 @@ function onWA(e){
     return;
   }
   if(res.err){ show(res.err, true); return; }
-  if(res.ev && !S.events.includes(res.ev)) S.events.push(res.ev);
+  if(res.ev){
+    if(!S.events.includes(res.ev)) S.events.push(res.ev);
+    tandai(res.ev); ubah();      /* "bangun" menutup sesi yang sudah ada, tetap satu perubahan */
+  }
   save(); render();
   show(res.msg, false);
   const i2 = document.getElementById('waIn');
@@ -2019,6 +2447,8 @@ document.addEventListener('change', e => {
   if(!el) return;
   const f = el.dataset.f, raw = el.value.trim();
   if(f === 'name')  S.child.name = raw || 'Anak';
+  if(f === 'meName'){ S.me.name = raw || 'Kamu'; S.people = S.people.map(x =>
+    (x.via === 'aplikasi' && !x.dev ? Object.assign(x, {name:S.me.name}) : x)); }
   if(f === 'born' && raw) S.child.bornAt = new Date(raw + 'T07:00:00').toISOString();
   if(f === 'gest')  S.child.gest = raw ? Math.max(22, Math.min(42, +raw)) : null;
   if(f === 'bkg')   S.child.birthKg = raw ? +raw : null;
@@ -2029,6 +2459,13 @@ document.addEventListener('change', e => {
 S = load();
 if(S.theme) document.documentElement.setAttribute('data-theme', S.theme);
 render();
+pasangKanal();
+/* sinyal balik: antrean yang menumpuk saat offline dikirim begitu online, tanpa disuruh */
+if(typeof window !== 'undefined' && window.addEventListener){
+  window.addEventListener('online', () => {
+    if(tersambung() && S.hh.sync.pending){ dorong(); render(); }
+  });
+}
 /* jangan gambar ulang saat perkenalan atau saat lembar terbuka — isian yang sedang diketik hilang */
 setInterval(() => {
   if(S.onboarded && !document.querySelector('.scrim')) render();

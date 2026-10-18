@@ -1,5 +1,5 @@
 /* Service worker Bayiku — dibuat otomatis oleh bangun-situs.js, jangan diedit tangan. */
-const V = 'bayiku-b460c76360';
+const V = 'bayiku-46551da99c';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
                './ikon-192.png', './ikon-512.png', './ikon-180.png', './ikon-32.png'];
 
