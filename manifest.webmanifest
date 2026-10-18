@@ -1,0 +1,38 @@
+{
+  "name": "Bayiku",
+  "short_name": "Bayiku",
+  "description": "Catatan harian bayi yang bisa diisi siapa pun yang sedang pegang anaknya.",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#15111A",
+  "theme_color": "#15111A",
+  "categories": [
+    "health",
+    "lifestyle",
+    "parenting"
+  ],
+  "icons": [
+    {
+      "src": "./ikon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./ikon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./ikon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
